@@ -66,7 +66,15 @@ class ClipboardManagerUI:
         )
         title_label.pack(side="left", padx=15, pady=15)
 
-        clear_button = ttk.Button(header_frame, text="Clear All", command=self.clear_all)
+        style = ttk.Style()
+        style.configure("TButton",
+                        background="#222222",
+                        foreground="#222222",
+                        borderwidth=0)
+        style.map("TButton", 
+                background=[('active', '#222222'), ('pressed', '#333333')])
+
+        clear_button = ttk.Button(header_frame, text="Clear All", style="TButton", command=self.clear_all)
         clear_button.pack(side="right", padx=15, pady=15)
 
         header_frame.bind("<Button-1>", self.start_move)
