@@ -1,3 +1,5 @@
 pynput
 pyperclip
 pyautogui
+customtkinter
+Image

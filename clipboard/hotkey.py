@@ -5,6 +5,7 @@ class HotkeyListener:
     def __init__(self, on_activate_callback):
         self.on_activate_callback = on_activate_callback
         self.is_win_pressed = False
+        
     def start(self):
         def on_press(key):
             try:

@@ -1,4 +1,5 @@
-import tkinter as tk
+import os
+os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
 from queue import Queue
 import threading
 from clipboard.ui import ClipboardManagerUI
