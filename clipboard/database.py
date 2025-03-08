@@ -1,7 +1,10 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.expanduser("~"), ".test_clipboard.db")
+HOME_DIR = os.path.expanduser("~")
+DB_DIR = os.path.join(HOME_DIR, ".clipboard")
+os.makedirs(DB_DIR, exist_ok=True)
+DB_PATH = os.path.join(DB_DIR, ".clipboard.db")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -9,7 +12,7 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS clipboard (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content TEXT NOT NULL,
+            content TEXT NOT NULL COLLATE NOCASE,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
