@@ -1,5 +1,6 @@
+from io import BytesIO
 import tkinter as tk
-from clipboard.database import get_clipboard_items, clear_clipboard
+from clipboard.inmemory import ClipboardItem, get_clipboard_items, clear_clipboard, get_decompressed_text
 import pyautogui
 import os
 import customtkinter as ctk
@@ -21,9 +22,7 @@ class ClipboardManagerUI:
         self.root.withdraw()
 
         self.clipboard_monitor.add_listener(self)
-
         self.process_queue()
-
         self.bind_hotkey()
 
     def process_queue(self):
@@ -55,27 +54,31 @@ class ClipboardManagerUI:
             return
 
         self.popup = ctk.CTkToplevel(self.root)
+        self.popup.wm_attributes("-topmost", True)
+
         self.popup.title("Clipboard")
         self.popup.geometry("400x450+500+200")
         self.popup.overrideredirect(True)
-        self.popup.configure(fg_color="#222222")  
+        self.popup.configure(fg_color="#222222", bd=0, highlightthickness=0)
 
-        main_header_frame = ctk.CTkFrame(self.popup, fg_color="#292929", corner_radius=10)
-        main_header_frame.pack(fill="x", pady=5, padx=10)
+        main_header_frame = ctk.CTkFrame(self.popup, fg_color="#292929", corner_radius=10, border_width=0)
+        main_header_frame.pack(fill="x", pady=5, padx=5)
 
-        title_label = ctk.CTkLabel(main_header_frame, text="Clipboard", font=("Noto Emoji", 14, "bold"))
+        title_label = ctk.CTkLabel(main_header_frame, text="Clipboard", font=("Inter", 15, "bold"), text_color="white", fg_color="#292929")
         title_label.pack(side="left", padx=15, pady=10)
 
         close_button = ctk.CTkButton(main_header_frame, text="✖", width=40, command=self.close_popup, fg_color="#444", hover_color="#666")
-        close_button.pack(side="right", padx=10, pady=5)
+        close_button.pack(side="right", padx=(5, 10), pady=5)
 
-        close_button = ctk.CTkButton(main_header_frame, text="Clear All", width=80, command=self.clear_all, fg_color="#444", hover_color="#666")
-        close_button.pack(side="right", padx=10, pady=5)
+        clear_button = ctk.CTkButton(main_header_frame, text="Clear All", width=80, command=self.clear_all, text_color="white", fg_color="transparent", hover_color="#666", border_color="#444", corner_radius=8, border_width=2)
+        clear_button.pack(side="right", padx=(5, 5), pady=3)
 
         main_header_frame.bind("<Button-1>", self.start_move)
         main_header_frame.bind("<B1-Motion>", self.on_move)
+        title_label.bind("<Button-1>", self.start_move)
+        title_label.bind("<B1-Motion>", self.on_move)
 
-        footer = ctk.CTkLabel(self.popup, text="© Dhruvin Dhameliya", fg_color="#222222", text_color="white", font=("Noto Emoji", 10))
+        footer = ctk.CTkLabel(self.popup, text="© Dhruvin Dhameliya", fg_color="#222222", text_color="white", font=("Inter", 11))
         footer.pack(side="bottom", fill="x", pady=0)
 
         self.popup.bind("<Button-1>", self.check_close_popup)
@@ -95,8 +98,8 @@ class ClipboardManagerUI:
         
     def setup_ui(self):
         """Set up the UI elements in the popup."""
-        self.canvas = ctk.CTkCanvas(self.popup, bg="#222222")
-        self.scrollbar = ctk.CTkScrollbar(self.popup, orientation="vertical", command=self.canvas.yview, width=12)  # Thinner scrollbar (adjust the value as needed)
+        self.canvas = ctk.CTkCanvas(self.popup, bg="#222222", highlightthickness=0, bd=0)
+        self.scrollbar = ctk.CTkScrollbar(self.popup, orientation="vertical", command=self.canvas.yview, width=12)
         self.scrollable_frame = ctk.CTkFrame(self.canvas, fg_color="transparent")
 
         self.scrollable_frame.bind(
@@ -111,16 +114,20 @@ class ClipboardManagerUI:
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
 
+        self.canvas.configure(yscrollcommand="")
+        self.scrollbar.pack_forget()
+        self.canvas.unbind_all("<MouseWheel>")
+
         self.root.after(100, self.update_items)
 
     def _bind_mousewheel(self):
         """Bind mouse wheel scrolling to the canvas."""
-        if self.root.tk.call('tk', 'windowingsystem') == 'x11':  # Linux (X11)
+        if self.root.tk.call('tk', 'windowingsystem') == 'x11':
             self.popup.bind("<Button-4>", self._on_mousewheel_linux)
             self.popup.bind("<Button-5>", self._on_mousewheel_linux)
             self.canvas.bind("<Button-4>", self._on_mousewheel_linux)
             self.canvas.bind("<Button-5>", self._on_mousewheel_linux)
-        else:  # Windows and macOS
+        else:
             self.popup.bind("<MouseWheel>", self._on_mousewheel)
             self.canvas.bind("<MouseWheel>", self._on_mousewheel)
 
@@ -139,7 +146,7 @@ class ClipboardManagerUI:
         """Update the listbox with the latest clipboard items."""
         if not self.popup or not self.popup.winfo_exists():
             return
-
+        
         if not self.scrollable_frame.winfo_exists():
             return
 
@@ -151,7 +158,6 @@ class ClipboardManagerUI:
     def fetch_clipboard_items(self):
         """Fetch clipboard items and update the UI."""
         self.clipboard_items = get_clipboard_items()[:10]
-
         self.populate_items()
 
     def populate_items(self):
@@ -173,7 +179,45 @@ class ClipboardManagerUI:
         button_width_height = 48
         text_width = card_width - button_width_height - 20
 
+        self.canvas.configure(yscrollcommand="")
+        self.scrollbar.pack_forget()
+        self.canvas.unbind_all("<MouseWheel>")
+
         self.popup.geometry(f"{popup_width}x{popup_height}")
+
+        if not self.clipboard_items:
+            self.scrollable_frame.grid_rowconfigure(0, weight=1)
+            self.scrollable_frame.grid_columnconfigure(0, weight=1)
+
+            empty_box = ctk.CTkFrame(self.scrollable_frame, width=popup_width, height=popup_height, fg_color="transparent")
+            empty_box.grid(row=0, column=0, sticky="nsew", pady=(116, 0))
+            empty_box.pack_propagate(False)
+
+            empty_box.grid_rowconfigure(0, weight=1)
+            empty_box.grid_rowconfigure(1, weight=1)
+            empty_box.grid_columnconfigure(0, weight=1)
+
+            empty_title = ctk.CTkLabel(
+                empty_box,
+                text="Nothing here",
+                text_color="white",
+                font=("Inter", 15, "bold"),
+                anchor="center",
+                wraplength=350,
+                width=popup_width
+            )
+            empty_title.grid(row=0, column=0, pady=(20,0))
+            empty_message = ctk.CTkLabel(
+                empty_box,
+                text="You'll see your clipboard history here once\nyou've copied something.",
+                text_color="white",
+                font=("Inter", 13),
+                anchor="center",
+                wraplength=350
+            )
+            empty_message.grid(row=1, column=0, pady=(5, 20))
+            
+            return
 
         for index, item in enumerate(self.clipboard_items):
             card = ctk.CTkFrame(self.scrollable_frame,
@@ -193,12 +237,13 @@ class ClipboardManagerUI:
                 self.canvas.configure(yscrollcommand="")
                 self.scrollbar.pack_forget()
                 self.canvas.unbind_all("<MouseWheel>")
-                    
+
             text_frame = ctk.CTkFrame(card, width=text_width, height=card_height, fg_color="#2C2C2C")
             text_frame.pack(side="left", fill="y", padx=5, pady=5)
             text_frame.pack_propagate(False)
 
-            limited_text = self.limit_text_to_lines(item[1], max_lines=3)
+            text_data = get_decompressed_text(item)
+            limited_text = self.limit_text_to_lines(text_data, max_lines=3)
 
             text_label = ctk.CTkLabel(
                 text_frame,
@@ -207,26 +252,30 @@ class ClipboardManagerUI:
                 anchor="w",
                 justify="left",
                 text_color="white",
-                font=("Noto Emoji", 12)
+                font=("Noto Emoji", 13)
             )
             text_label.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
             button_frame = ctk.CTkFrame(card, 
-                                        width=button_width_height, 
+                                        width=button_width_height-5, 
                                         height=button_width_height, 
                                         fg_color="#2C2C2C")
-            button_frame.pack(side="right", fill="both", padx=5, pady=5)
+            button_frame.pack(side="right", fill="both", padx=5, pady=5, anchor="center")
             button_frame.pack_propagate(False)
 
             copy_button = ctk.CTkButton(button_frame, 
-                                        image=copy_icon, 
-                                        fg_color="#444", 
-                                        height=30, 
-                                        hover_color="#666", 
-                                        command=partial(self.copy_to_clipboard, item[1]), 
-                                        anchor="center")
+                                        image=copy_icon,
+                                        height=30,
+                                        text="",                                        
+                                        hover_color="#666",
+                                        command=partial(self.copy_to_clipboard, item),
+                                        fg_color="transparent", 
+                                        border_color="#444",
+                                        border_width=2,
+                                        anchor="center",
+                                        )
             copy_button.image = copy_icon
-            copy_button.pack(side="left", fill="x", expand=True, padx=5, pady=5)
+            copy_button.pack(side="right", fill="x", expand=True, padx=(0, 5), pady=5, anchor="center")
 
     def limit_text_to_lines(self, text, max_lines=3, width=40):
         """Limit text to fit a specific number of lines with truncation."""
@@ -240,20 +289,25 @@ class ClipboardManagerUI:
 
         return "\n".join(wrapped_lines)
 
-    def copy_to_clipboard(self, text):
-        """Copy text (including emojis) to clipboard and paste it into the active input field."""
+    def copy_to_clipboard(self, clipboard_item: ClipboardItem):
+        """Copy text (including emojis) or image to clipboard and paste it into the active input field."""
         try:
             self.popup.clipboard_clear()
-            self.popup.clipboard_append(text)
+            txt = get_decompressed_text(clipboard_item)
+            self.popup.clipboard_append(txt)
             self.popup.update()
             pyautogui.hotkey('ctrl', 'v')
             self.close_popup()
+
         except Exception as e:
-                print(f"Error copying to clipboard: {e}")        
+            print(f"Error copying to clipboard: {e}")
 
     def clear_all(self):
         """Clear all clipboard history."""
+        if not self.clipboard_items:
+            return
         clear_clipboard()
+        self.clipboard_items = []
         self.update_items()
         self.canvas.configure(yscrollcommand="")
         self.scrollbar.pack_forget()
