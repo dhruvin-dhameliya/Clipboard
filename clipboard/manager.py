@@ -1,6 +1,6 @@
 import pyperclip
 import time
-from clipboard.database import add_clipboard_item, get_clipboard_items
+from clipboard.inmemory import add_clipboard_item
 
 class ClipboardMonitor:
     def __init__(self):
