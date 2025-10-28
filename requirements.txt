@@ -1,9 +1,11 @@
-pynput
-pyperclip
-pyautogui
-customtkinter
-Pillow
-Image
-zlib
+pynput>=1.8.1
+pyperclip>=1.8.2
+pyautogui>=0.9.54
+customtkinter>=5.2.0
+Pillow>=10.0.0
 
 # pip install -r requirements.txt
+
+# pip install pyinstaller
+
+# pyinstaller --onefile --windowed --name="Clipboard" --add-data="clipboard/copy_icon.png:clipboard" --hidden-import=pynput.keyboard._xorg --hidden-import=pynput.mouse._xorg --hidden-import=PIL._tkinter_finder --collect-all=customtkinter main.py
